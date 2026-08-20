@@ -11,30 +11,75 @@ st.set_page_config(
 )
 
 st.title("🔍 Quotation Equipment Checker")
-st.write("Upload a quotation PDF and identify whether the quoted item is equipment.")
+st.write(
+    "Upload a quotation and automatically identify equipment items."
+)
 
 
 # =========================================================
-# Keywords
+# Equipment keywords
 # =========================================================
 
 equipment_keywords = [
+    # General equipment
     "equipment",
     "instrument",
     "machine",
     "system",
-    "analyzer",
-    "monitor",
+    "setup",
+    "apparatus",
+    "unit",
+
+    # Laboratory instruments
     "microscope",
     "centrifuge",
     "spectrometer",
     "spectrophotometer",
+    "raman",
+    "raman spectro",
+    "potentiostat",
+    "electrolyser",
+    "electrolyzer",
     "chromatograph",
+    "microgc",
     "hplc",
     "gc-ms",
     "mass spectrometer",
-    "pcr machine",
-    "thermal cycler",
+    "analyzer",
+    "analyser",
+    "detector",
+    "monitor",
+
+    # Printing / manufacturing
+    "3d printer",
+    "printer",
+    "assembly line",
+    "fabrication system",
+
+    # Reactors / process equipment
+    "reactor",
+    "parallel reactor",
+    "electrolyser",
+    "electrolyzer",
+    "dehydration setup",
+    "process system",
+    "processing unit",
+
+    # Cooling / heating
+    "chiller",
+    "mini chiller",
+    "mini chiler",
+    "water chiller",
+    "recirculating chiller",
+    "cooling system",
+    "cooling unit",
+    "heater",
+    "heating system",
+    "heating circulator",
+    "water bath",
+    "dry bath",
+
+    # Common laboratory equipment
     "oven",
     "vacuum oven",
     "incubator",
@@ -42,22 +87,35 @@ equipment_keywords = [
     "refrigerator",
     "shaker",
     "autoclave",
-    "pump",
-    "vacuum pump",
-    "water bath",
-    "dry bath",
     "fume hood",
     "biosafety cabinet",
     "balance",
     "analytical balance",
+    "vacuum pump",
+    "pump",
     "laser",
-    "detector",
+    "probe station",
+    "environmental chamber",
+    "glove box",
+    "glovebox",
+
+    # Radiation equipment
     "radiation monitor",
-    "contamination monitor",
     "radiation detector",
+    "contamination monitor",
+    "radiation contamination monitor",
+
+    # Other
+    "scanner",
     "printer",
-    "scanner"
+    "fabrication",
+    "production system"
 ]
+
+
+# =========================================================
+# Non-equipment keywords
+# =========================================================
 
 non_equipment_keywords = [
     "chemical",
@@ -81,12 +139,37 @@ non_equipment_keywords = [
     "installation service",
     "maintenance service",
     "training",
-    "repair"
+    "repair",
+    "replacement part",
+    "spare part"
 ]
 
 
 # =========================================================
-# Extract PDF text
+# Strong equipment phrases
+# =========================================================
+
+strong_equipment_phrases = [
+    "3d printer",
+    "portable potentiostat",
+    "radiation contamination monitor",
+    "radiation monitor",
+    "contamination monitor",
+    "benchtop-plant",
+    "assembly line",
+    "parallel reactor",
+    "formic acid dehydration setup",
+    "mini chiller",
+    "mini chiler",
+    "raman spectro",
+    "microgc",
+    "electrolyser",
+    "electrolyzer"
+]
+
+
+# =========================================================
+# Extract PDF
 # =========================================================
 
 def read_pdf(uploaded_file):
@@ -102,21 +185,21 @@ def read_pdf(uploaded_file):
 
     for page_number, page in enumerate(pdf, start=1):
 
-        page_text = page.get_text()
-
         pages.append({
             "page": page_number,
-            "text": page_text
+            "text": page.get_text()
         })
 
     return pages
 
 
 # =========================================================
-# Remove quotation terms
+# Detect quotation terms
 # =========================================================
 
 def is_terms_section(text):
+
+    text_lower = text.lower()
 
     terms_keywords = [
         "terms & condition",
@@ -126,28 +209,21 @@ def is_terms_section(text):
         "delivery time",
         "incoterms",
         "payment terms",
-        "validity",
         "customs duty",
-        "value added tax",
-        "vat",
         "force majeure",
         "cancellation"
     ]
 
-    lower_text = text.lower()
-
-    matches = 0
-
-    for keyword in terms_keywords:
-
-        if keyword in lower_text:
-            matches += 1
+    matches = sum(
+        keyword in text_lower
+        for keyword in terms_keywords
+    )
 
     return matches >= 2
 
 
 # =========================================================
-# Find item descriptions
+# Extract quotation items
 # =========================================================
 
 def extract_items(pages):
@@ -172,7 +248,7 @@ def extract_items(pages):
 
         for line in lines:
 
-            # Detect item number
+            # Item number
             item_match = re.match(
                 r"^(\d+)\s*$",
                 line
@@ -180,7 +256,6 @@ def extract_items(pages):
 
             if item_match:
 
-                # Save previous item
                 if current_item is not None:
 
                     description = " ".join(
@@ -200,28 +275,28 @@ def extract_items(pages):
 
                 continue
 
-            # Skip obvious headers
+            # Ignore quotation headers
             if line.lower() in [
                 "pricing",
                 "sr. no.",
                 "description",
                 "qty",
+                "quantity",
                 "unit",
                 "price",
+                "unit price",
+                "total",
                 "total amount",
                 "sar"
             ]:
                 continue
 
-            # Skip total
             if line.lower().startswith("total amt"):
                 continue
 
-            # Skip notes
             if line.lower().startswith("note:"):
                 continue
 
-            # Add useful description text
             if current_item is not None:
 
                 current_description.append(line)
@@ -250,17 +325,9 @@ def extract_items(pages):
 
 def clean_description(description):
 
-    # Remove repeated spaces
     description = re.sub(
         r"\s+",
         " ",
-        description
-    )
-
-    # Remove pricing information
-    description = re.sub(
-        r"\b\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b",
-        "",
         description
     )
 
@@ -268,84 +335,117 @@ def clean_description(description):
 
 
 # =========================================================
-# Classification
+# Classify item
 # =========================================================
 
 def classify_item(description):
 
     text = description.lower()
 
+    # ---------------------------------------------
+    # Strong equipment phrase
+    # ---------------------------------------------
+
+    strong_matches = []
+
+    for phrase in strong_equipment_phrases:
+
+        if phrase in text:
+            strong_matches.append(phrase)
+
+    if strong_matches:
+
+        return (
+            "Equipment",
+            99,
+            "Strong equipment match: "
+            + ", ".join(strong_matches)
+        )
+
+
+    # ---------------------------------------------
+    # Normal equipment keywords
+    # ---------------------------------------------
+
     equipment_matches = []
-    non_equipment_matches = []
 
     for keyword in equipment_keywords:
 
         if keyword in text:
+            equipment_matches.append(keyword)
 
-            equipment_matches.append(
-                keyword
-            )
+
+    # ---------------------------------------------
+    # Non-equipment keywords
+    # ---------------------------------------------
+
+    non_equipment_matches = []
 
     for keyword in non_equipment_keywords:
 
         if keyword in text:
+            non_equipment_matches.append(keyword)
 
-            non_equipment_matches.append(
-                keyword
-            )
 
-    # Strong equipment evidence
+    # ---------------------------------------------
+    # Equipment
+    # ---------------------------------------------
+
     if equipment_matches and not non_equipment_matches:
 
         confidence = min(
-            95 + len(equipment_matches) * 2,
-            99
-        )
-
-        reason = (
-            "The description contains equipment-related terms: "
-            + ", ".join(equipment_matches)
+            90 + len(equipment_matches) * 3,
+            98
         )
 
         return (
             "Equipment",
             confidence,
-            reason
+            "Equipment indicators: "
+            + ", ".join(equipment_matches)
         )
 
-    # Strong non-equipment evidence
+
+    # ---------------------------------------------
+    # Non-equipment
+    # ---------------------------------------------
+
     if non_equipment_matches and not equipment_matches:
 
         confidence = min(
-            95 + len(non_equipment_matches) * 2,
-            99
-        )
-
-        reason = (
-            "The description contains non-equipment terms: "
-            + ", ".join(non_equipment_matches)
+            90 + len(non_equipment_matches) * 3,
+            98
         )
 
         return (
             "Not Equipment",
             confidence,
-            reason
+            "Non-equipment indicators: "
+            + ", ".join(non_equipment_matches)
         )
 
-    # Both types detected
+
+    # ---------------------------------------------
+    # Both
+    # ---------------------------------------------
+
     if equipment_matches and non_equipment_matches:
 
         return (
             "Review",
-            60,
-            "Both equipment and non-equipment terms were detected."
+            65,
+            "Both equipment and non-equipment indicators were found."
         )
 
-    # Nothing detected
+
+    # ---------------------------------------------
+    # Unknown
+    # ---------------------------------------------
+
     return (
         "Review",
         50,
-        "The description does not contain enough information for automatic classification."
+        "Not enough information for automatic classification."
     )
 
 
@@ -365,12 +465,15 @@ if uploaded_file:
         f"Uploaded: {uploaded_file.name}"
     )
 
-    # Read PDF
     pages = read_pdf(
         uploaded_file
     )
 
-    # Preview extracted text
+
+    # =====================================================
+    # Preview PDF text
+    # =====================================================
+
     with st.expander(
         "📄 View extracted quotation text"
     ):
@@ -385,6 +488,10 @@ if uploaded_file:
                 page["text"][:5000]
             )
 
+
+    # =====================================================
+    # Check
+    # =====================================================
 
     if st.button(
         "🔍 Check Quotation",
