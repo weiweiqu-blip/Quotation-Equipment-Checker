@@ -11,33 +11,38 @@ st.set_page_config(
 )
 
 st.title("🔍 Quotation Equipment Checker")
-st.write(
-    "Upload a quotation and automatically identify equipment items."
-)
+st.write("Automatically extract and classify quotation line items.")
 
 
 # =========================================================
-# Equipment keywords
+# KEYWORDS
 # =========================================================
 
 equipment_keywords = [
-    # General equipment
     "equipment",
     "instrument",
     "machine",
     "system",
     "setup",
     "apparatus",
-    "unit",
 
-    # Laboratory instruments
+     "nxds",
+    "nxds6ic",
+    "vacuum pump",
+    "vacuum",
+
+    "3d printer",
+    "printer",
+    "generator",
+    "hydrogen generator",
+
     "microscope",
     "centrifuge",
     "spectrometer",
     "spectrophotometer",
     "raman",
-    "raman spectro",
     "potentiostat",
+
     "electrolyser",
     "electrolyzer",
     "chromatograph",
@@ -45,41 +50,24 @@ equipment_keywords = [
     "hplc",
     "gc-ms",
     "mass spectrometer",
+
     "analyzer",
     "analyser",
     "detector",
     "monitor",
 
-    # Printing / manufacturing
-    "3d printer",
-    "printer",
-    "assembly line",
-    "fabrication system",
-
-    # Reactors / process equipment
     "reactor",
     "parallel reactor",
-    "electrolyser",
-    "electrolyzer",
-    "dehydration setup",
-    "process system",
-    "processing unit",
 
-    # Cooling / heating
     "chiller",
+    "chiler",
     "mini chiller",
     "mini chiler",
     "water chiller",
     "recirculating chiller",
     "cooling system",
     "cooling unit",
-    "heater",
-    "heating system",
-    "heating circulator",
-    "water bath",
-    "dry bath",
 
-    # Common laboratory equipment
     "oven",
     "vacuum oven",
     "incubator",
@@ -87,37 +75,50 @@ equipment_keywords = [
     "refrigerator",
     "shaker",
     "autoclave",
+
     "fume hood",
     "biosafety cabinet",
+
     "balance",
     "analytical balance",
-    "vacuum pump",
+
     "pump",
+    "vacuum pump",
+
     "laser",
     "probe station",
-    "environmental chamber",
-    "glove box",
-    "glovebox",
 
-    # Radiation equipment
+    "environmental chamber",
+
     "radiation monitor",
     "radiation detector",
     "contamination monitor",
-    "radiation contamination monitor",
 
-    # Other
-    "scanner",
-    "printer",
-    "fabrication",
-    "production system"
+    "assembly line",
+    "fabrication system"
 ]
 
 
-# =========================================================
-# Non-equipment keywords
-# =========================================================
+accessory_keywords = [
+    "cable",
+    "power cable",
+    "pwr cable",
+    "silencer",
+    "adapter",
+    "adaptor",
+    "connector",
+    "hose",
+    "bracket",
+    "mounting kit",
+    "stand",
+    "holder",
+    "accessory",
+    "spare part",
+    "replacement part"
+]
 
-non_equipment_keywords = [
+
+consumable_keywords = [
     "chemical",
     "reagent",
     "solvent",
@@ -128,48 +129,55 @@ non_equipment_keywords = [
     "consumable",
     "pipette tip",
     "pipette tips",
-    "tips",
     "tube",
     "tubes",
     "bottle",
     "gloves",
     "filter",
-    "membrane",
+    "membrane"
+]
+
+
+service_keywords = [
     "service",
     "installation service",
     "maintenance service",
     "training",
     "repair",
-    "replacement part",
-    "spare part"
+    "calibration service"
+]
+
+
+stop_keywords = [
+    "remarks:",
+    "remarks",
+    "incoterm:",
+    "incoterms:",
+    "payment term:",
+    "payment terms:",
+    "bank info:",
+    "bank information:",
+    "bank charge",
+    "terms & conditions",
+    "terms and conditions",
+    "terms & condition",
+    "terms and condition",
+    "delivery time:",
+    "warranty:",
+    "validity:",
+    "force majeure:",
+    "cancellation:",
+    "customs duty:",
+    "value added tax:",
+    "vat:",
+    "please raise the order",
+    "best regards",
+    "kind regards"
 ]
 
 
 # =========================================================
-# Strong equipment phrases
-# =========================================================
-
-strong_equipment_phrases = [
-    "3d printer",
-    "portable potentiostat",
-    "radiation contamination monitor",
-    "radiation monitor",
-    "contamination monitor",
-    "benchtop-plant",
-    "assembly line",
-    "parallel reactor",
-    "formic acid dehydration setup",
-    "mini chiller",
-    "mini chiler",
-    "raman spectro",
-    "microgc",
-    "electrolyser",
-    "electrolyzer"
-]
-
-
-# =========================================================
-# Extract PDF
+# PDF READING
 # =========================================================
 
 def read_pdf(uploaded_file):
@@ -194,36 +202,110 @@ def read_pdf(uploaded_file):
 
 
 # =========================================================
-# Detect quotation terms
+# STOP CHECK
 # =========================================================
 
-def is_terms_section(text):
+def is_stop_line(line):
 
-    text_lower = text.lower()
+    text = line.lower().strip()
 
-    terms_keywords = [
-        "terms & condition",
-        "terms and condition",
-        "terms & conditions",
-        "terms and conditions",
-        "delivery time",
-        "incoterms",
-        "payment terms",
-        "customs duty",
-        "force majeure",
-        "cancellation"
+    for keyword in stop_keywords:
+
+        if text.startswith(keyword):
+            return True
+
+    return False
+
+
+# =========================================================
+# HEADER CHECK
+# =========================================================
+
+def is_header(line):
+
+    text = line.lower().strip()
+
+    headers = [
+        "description",
+        "qty",
+        "quantity",
+        "unit",
+        "unit price",
+        "price",
+        "total",
+        "total price",
+        "total amount",
+        "unit price (usd)",
+        "total price (usd)",
+        "unit price sar",
+        "total amount sar",
+        "pn",
+        "part no.",
+        "part number",
+        "sr. no.",
+        "sr no."
     ]
 
-    matches = sum(
-        keyword in text_lower
-        for keyword in terms_keywords
-    )
-
-    return matches >= 2
+    return text in headers
 
 
 # =========================================================
-# Extract quotation items
+# PART NUMBER CHECK
+# =========================================================
+
+def looks_like_part_number(line):
+
+    text = line.strip()
+
+    patterns = [
+
+        r"^[A-Z]\d{6,}$",
+
+        r"^[A-Z]{2,}\d{3,}$",
+
+        r"^[A-Z0-9]+-[A-Z0-9-]+$",
+
+        r"^[A-Z0-9]{5,}$"
+    ]
+
+    return any(
+        re.match(pattern, text, re.IGNORECASE)
+        for pattern in patterns
+    )
+
+
+# =========================================================
+# ITEM NUMBER CHECK
+# =========================================================
+
+def looks_like_item_number(line):
+
+    return bool(
+        re.match(
+            r"^\d{1,3}$",
+            line.strip()
+        )
+    )
+
+
+# =========================================================
+# PRICE CHECK
+# =========================================================
+
+def looks_like_price(line):
+
+    text = line.strip()
+
+    return bool(
+        re.match(
+            r"^[\d,]+(?:\.\d{1,2})?$",
+            text
+        )
+    )
+
+
+# =========================================================
+# EXTRACT ITEMS
 # =========================================================
 
 def extract_items(pages):
@@ -232,35 +314,49 @@ def extract_items(pages):
 
     for page in pages:
 
-        text = page["text"]
-
-        if is_terms_section(text):
-            continue
-
         lines = [
             line.strip()
-            for line in text.splitlines()
+            for line in page["text"].splitlines()
             if line.strip()
         ]
 
         current_item = None
         current_description = []
 
+        inside_quotation = False
+
         for line in lines:
 
-            # Item number
-            item_match = re.match(
-                r"^(\d+)\s*$",
-                line
-            )
+            lower = line.lower().strip()
 
-            if item_match:
+
+            # ---------------------------------------------
+            # Detect quotation table
+            # ---------------------------------------------
+
+            if (
+                lower == "description"
+                or lower == "pn"
+                or "unit price" in lower
+                or "total price" in lower
+            ):
+
+                inside_quotation = True
+
+                continue
+
+
+            # ---------------------------------------------
+            # Stop after quotation table
+            # ---------------------------------------------
+
+            if inside_quotation and is_stop_line(line):
 
                 if current_item is not None:
 
                     description = " ".join(
                         current_description
-                    )
+                    ).strip()
 
                     if description:
 
@@ -270,43 +366,108 @@ def extract_items(pages):
                             "Page": page["page"]
                         })
 
-                current_item = item_match.group(1)
+                current_item = None
+                current_description = []
+
+                inside_quotation = False
+
+                continue
+
+
+            if not inside_quotation:
+                continue
+
+
+            # ---------------------------------------------
+            # Skip headers
+            # ---------------------------------------------
+
+            if is_header(line):
+                continue
+
+
+            # ---------------------------------------------
+            # New Part Number
+            # ---------------------------------------------
+
+            if looks_like_part_number(line):
+
+                if current_item is not None:
+
+                    description = " ".join(
+                        current_description
+                    ).strip()
+
+                    if description:
+
+                        items.append({
+                            "Item": current_item,
+                            "Description": description,
+                            "Page": page["page"]
+                        })
+
+                current_item = line
                 current_description = []
 
                 continue
 
-            # Ignore quotation headers
-            if line.lower() in [
-                "pricing",
-                "sr. no.",
-                "description",
-                "qty",
-                "quantity",
-                "unit",
-                "price",
-                "unit price",
-                "total",
-                "total amount",
-                "sar"
-            ]:
+
+            # ---------------------------------------------
+            # Numeric item number
+            # ---------------------------------------------
+
+            if looks_like_item_number(line):
+
+                # If we already have an item, a number
+                # is probably Qty, not a new item.
+                if current_item is not None:
+
+                    continue
+
+                current_item = line
+                current_description = []
+
                 continue
 
-            if line.lower().startswith("total amt"):
+
+            # ---------------------------------------------
+            # Ignore prices
+            # ---------------------------------------------
+
+            if looks_like_price(line):
+
                 continue
 
-            if line.lower().startswith("note:"):
+
+            # ---------------------------------------------
+            # Ignore obvious table totals
+            # ---------------------------------------------
+
+            if lower.startswith("fca "):
                 continue
+
+            if lower.startswith("total"):
+                continue
+
+
+            # ---------------------------------------------
+            # Add to description
+            # ---------------------------------------------
 
             if current_item is not None:
 
                 current_description.append(line)
 
+
+        # ---------------------------------------------
         # Save final item
+        # ---------------------------------------------
+
         if current_item is not None:
 
             description = " ".join(
                 current_description
-            )
+            ).strip()
 
             if description:
 
@@ -316,11 +477,12 @@ def extract_items(pages):
                     "Page": page["page"]
                 })
 
+
     return items
 
 
 # =========================================================
-# Clean description
+# CLEAN DESCRIPTION
 # =========================================================
 
 def clean_description(description):
@@ -335,122 +497,93 @@ def clean_description(description):
 
 
 # =========================================================
-# Classify item
+# CLASSIFICATION
 # =========================================================
 
 def classify_item(description):
 
     text = description.lower()
 
-    # ---------------------------------------------
-    # Strong equipment phrase
-    # ---------------------------------------------
 
-    strong_matches = []
+    # Service
+    service_matches = [
+        x for x in service_keywords
+        if x in text
+    ]
 
-    for phrase in strong_equipment_phrases:
-
-        if phrase in text:
-            strong_matches.append(phrase)
-
-    if strong_matches:
+    if service_matches:
 
         return (
-            "Equipment",
-            99,
-            "Strong equipment match: "
-            + ", ".join(strong_matches)
+            "Service",
+            98,
+            "Service indicator: "
+            + ", ".join(service_matches)
         )
 
 
-    # ---------------------------------------------
-    # Normal equipment keywords
-    # ---------------------------------------------
+    # Accessory
+    accessory_matches = [
+        x for x in accessory_keywords
+        if x in text
+    ]
 
-    equipment_matches = []
+    if accessory_matches:
 
-    for keyword in equipment_keywords:
-
-        if keyword in text:
-            equipment_matches.append(keyword)
-
-
-    # ---------------------------------------------
-    # Non-equipment keywords
-    # ---------------------------------------------
-
-    non_equipment_matches = []
-
-    for keyword in non_equipment_keywords:
-
-        if keyword in text:
-            non_equipment_matches.append(keyword)
+        return (
+            "Accessory",
+            98,
+            "Accessory indicator: "
+            + ", ".join(accessory_matches)
+        )
 
 
-    # ---------------------------------------------
+    # Consumable
+    consumable_matches = [
+        x for x in consumable_keywords
+        if x in text
+    ]
+
+    if consumable_matches:
+
+        return (
+            "Consumable",
+            97,
+            "Consumable indicator: "
+            + ", ".join(consumable_matches)
+        )
+
+
     # Equipment
-    # ---------------------------------------------
+    equipment_matches = [
+        x for x in equipment_keywords
+        if x in text
+    ]
 
-    if equipment_matches and not non_equipment_matches:
+    if equipment_matches:
 
         confidence = min(
             90 + len(equipment_matches) * 3,
-            98
+            99
         )
 
         return (
             "Equipment",
             confidence,
-            "Equipment indicators: "
+            "Equipment indicator: "
             + ", ".join(equipment_matches)
         )
 
 
-    # ---------------------------------------------
-    # Non-equipment
-    # ---------------------------------------------
-
-    if non_equipment_matches and not equipment_matches:
-
-        confidence = min(
-            90 + len(non_equipment_matches) * 3,
-            98
-        )
-
-        return (
-            "Not Equipment",
-            confidence,
-            "Non-equipment indicators: "
-            + ", ".join(non_equipment_matches)
-        )
-
-
-    # ---------------------------------------------
-    # Both
-    # ---------------------------------------------
-
-    if equipment_matches and non_equipment_matches:
-
-        return (
-            "Review",
-            65,
-            "Both equipment and non-equipment indicators were found."
-        )
-
-
-    # ---------------------------------------------
     # Unknown
-    # ---------------------------------------------
-
     return (
         "Review",
         50,
-        "Not enough information for automatic classification."
+        "No clear classification keyword found."
     )
 
 
 # =========================================================
-# Upload
+# MAIN APP
 # =========================================================
 
 uploaded_file = st.file_uploader(
@@ -471,7 +604,7 @@ if uploaded_file:
 
 
     # =====================================================
-    # Preview PDF text
+    # Preview extracted text
     # =====================================================
 
     with st.expander(
@@ -485,12 +618,12 @@ if uploaded_file:
             )
 
             st.text(
-                page["text"][:5000]
+                page["text"][:10000]
             )
 
 
     # =====================================================
-    # Check
+    # CHECK
     # =====================================================
 
     if st.button(
@@ -502,15 +635,23 @@ if uploaded_file:
             pages
         )
 
+
         if not items:
 
-            st.warning(
+            st.error(
                 "No quotation items could be identified."
             )
+
+            st.info(
+                "Please open 'View extracted quotation text' "
+                "and check the quotation table structure."
+            )
+
 
         else:
 
             results = []
+
 
             for item in items:
 
@@ -522,11 +663,10 @@ if uploaded_file:
                     description
                 )
 
+
                 results.append({
 
-                    "Item":
-                        item["Item"],
-
+                    
                     "Description":
                         description,
 
@@ -550,11 +690,11 @@ if uploaded_file:
 
 
             # =================================================
-            # Results
+            # RESULTS
             # =================================================
 
             st.subheader(
-                "Checking Result"
+                "📋 All Quotation Items"
             )
 
             st.dataframe(
@@ -565,8 +705,12 @@ if uploaded_file:
 
 
             # =================================================
-            # Summary
+            # SUMMARY
             # =================================================
+
+            total_items = len(
+                result_df
+            )
 
             equipment_count = len(
                 result_df[
@@ -575,10 +719,24 @@ if uploaded_file:
                 ]
             )
 
-            not_equipment_count = len(
+            accessory_count = len(
                 result_df[
                     result_df["Category"]
-                    == "Not Equipment"
+                    == "Accessory"
+                ]
+            )
+
+            consumable_count = len(
+                result_df[
+                    result_df["Category"]
+                    == "Consumable"
+                ]
+            )
+
+            service_count = len(
+                result_df[
+                    result_df["Category"]
+                    == "Service"
                 ]
             )
 
@@ -590,24 +748,50 @@ if uploaded_file:
             )
 
 
-            col1, col2, col3 = st.columns(3)
+            st.subheader(
+                "📊 Summary"
+            )
+
+
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+
 
             with col1:
+                st.metric(
+                    "Total",
+                    total_items
+                )
 
+
+            with col2:
                 st.metric(
                     "Equipment",
                     equipment_count
                 )
 
-            with col2:
-
-                st.metric(
-                    "Not Equipment",
-                    not_equipment_count
-                )
 
             with col3:
+                st.metric(
+                    "Accessory",
+                    accessory_count
+                )
 
+
+            with col4:
+                st.metric(
+                    "Consumable",
+                    consumable_count
+                )
+
+
+            with col5:
+                st.metric(
+                    "Service",
+                    service_count
+                )
+
+
+            with col6:
                 st.metric(
                     "Review",
                     review_count
@@ -615,10 +799,11 @@ if uploaded_file:
 
 
             # =================================================
-            # Download Excel
+            # EXCEL
             # =================================================
 
             output = io.BytesIO()
+
 
             with pd.ExcelWriter(
                 output,
@@ -628,7 +813,7 @@ if uploaded_file:
                 result_df.to_excel(
                     writer,
                     index=False,
-                    sheet_name="Equipment Check"
+                    sheet_name="Quotation Check"
                 )
 
 
